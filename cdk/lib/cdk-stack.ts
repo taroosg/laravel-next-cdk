@@ -42,6 +42,7 @@ import { Bucket, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
 import { RemovalPolicy } from 'aws-cdk-lib';
 import { CfnOutput, Duration } from 'aws-cdk-lib';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 
 export class CdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -63,6 +64,23 @@ export class CdkStack extends cdk.Stack {
         },
       ],
     });
+
+    // --- Cognito ユーザープール ---
+    const userPool = new cognito.UserPool(this, 'MyUserPool', {
+      userPoolName: 'laravel-user-pool',
+      selfSignUpEnabled: true,
+      signInAliases: { email: true },
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const userPoolClient = userPool.addClient('MyUserPoolClient', {
+      userPoolClientName: 'laravel-user-pool-appclient',
+      generateSecret: false,
+      authFlows: {
+        userPassword: true,
+        userSrp: true,
+      },
+    });
+
 
     //
     // 2. RDS (MySQL) を作成
@@ -157,10 +175,12 @@ export class CdkStack extends cdk.Stack {
         DB_DATABASE: 'laravel',
         DB_USERNAME: 'admin',
         S3_BUCKET: s3Bucket.bucketName,
-        // APP_ENV: 'production',
+        COGNITO_USER_POOL_ID: userPool.userPoolId,
+        COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+        COGNITO_REGION: this.region,
+        APP_ENV: 'production',
       },
       secrets: {
-
         DB_PASSWORD: ECSSecret.fromSecretsManager(dbSecret, 'password'),
       },
     });
@@ -176,7 +196,8 @@ export class CdkStack extends cdk.Stack {
     const backendService = new FargateService(this, 'BackendService', {
       cluster,
       taskDefinition: backendTaskDef,
-      desiredCount: 1,
+      // 初回のみ0で実行 → Dockerイメージをビルドし、ECRにプッシュ → 以降1にしてcdk deploy
+      desiredCount: 0,
       assignPublicIp: true,
       vpcSubnets: { subnetType: SubnetType.PUBLIC },
     });
@@ -206,6 +227,13 @@ export class CdkStack extends cdk.Stack {
     //
     // 9. 出力
     //
+
+    // cognito関連の出力を追加
+    new CfnOutput(this, 'UserPoolId', {
+      value: userPool.userPoolId,
+      description: 'Cognito User Pool ID',
+    });
+
     new CfnOutput(this, 'LoadBalancerDNS', {
       value: alb.loadBalancerDnsName,
       description: 'Access your Laravel app at this DNS name',
