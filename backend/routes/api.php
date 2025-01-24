@@ -3,10 +3,6 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-  return $request->user();
-})->middleware('auth:sanctum');
-
 Route::get('/public', function () {
   return response()->json([
     'message' => 'This is public endpoint',
@@ -17,11 +13,13 @@ Route::get('/public', function () {
 Route::middleware('cognito.auth')->group(function () {
   // 保護されたGET
   Route::get('/protected', function (Request $request) {
-    // ミドルウェアでトークン検証済み
     $decoded = $request->attributes->get('cognito_decoded_token');
+    $user = $request->attributes->get('user');
+
     return response()->json([
       'message' => 'You are authenticated!',
       'decoded_token' => $decoded,
+      'user' => $user,
     ]);
   });
 

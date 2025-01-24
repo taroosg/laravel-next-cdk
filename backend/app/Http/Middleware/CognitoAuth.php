@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -72,9 +73,19 @@ class CognitoAuth
       //        throw new \Exception('Invalid iss');
       //    }
 
+      // ユーザが存在しない場合は、新規登録する
+      $user = User::firstOrCreate([
+        'cognito_sub' => $decoded->sub,
+      ], [
+        'cognito_sub' => $decoded->sub,
+        'name' => $decoded->sub,
+        'email' => $decoded->email,
+      ]);
+
       // 8. トークンからユーザ情報をリクエストにセット（任意）
       //    ここでは sub, email などが取得できる
       $request->attributes->set('cognito_decoded_token', $decoded);
+      $request->attributes->set('user', $user);
     } catch (\Exception $e) {
       return response()->json([
         'error' => 'Unauthorized: ' . $e->getMessage()
