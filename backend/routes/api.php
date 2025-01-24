@@ -14,7 +14,7 @@ Route::middleware('cognito.auth')->group(function () {
   // 保護されたGET
   Route::get('/protected', function (Request $request) {
     $decoded = $request->attributes->get('cognito_decoded_token');
-    $user = $request->attributes->get('user');
+    $user = auth()->user();
 
     return response()->json([
       'message' => 'You are authenticated!',

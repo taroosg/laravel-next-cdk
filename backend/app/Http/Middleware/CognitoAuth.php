@@ -66,12 +66,18 @@ class CognitoAuth
       //    RS256 で検証する
       $decoded = JWT::decode($token, new Key($pem, 'RS256'));
 
-      // 7. iss (発行者) / aud (クライアントID) / exp (有効期限) など追加チェックが必要なら行う
+      // 7. iss (発行者) / aud (クライアントID) / exp (有効期限) など追加チェック
       //    例:
-      //    $expectedIss = "https://cognito-idp.{$region}.amazonaws.com/{$userPoolId}";
-      //    if ($decoded->iss !== $expectedIss) {
-      //        throw new \Exception('Invalid iss');
-      //    }
+      $expectedIss = "https://cognito-idp.{$region}.amazonaws.com/{$userPoolId}";
+      if ($decoded->iss !== $expectedIss) {
+        throw new \Exception('Invalid iss');
+      }
+      // if ($decoded->aud !== env('COGNITO_CLIENT_ID')) {
+      //   throw new \Exception('Invalid aud');
+      // }
+      if ($decoded->exp < time()) {
+        throw new \Exception('Token expired');
+      }
 
       // ユーザが存在しない場合は、新規登録する
       $user = User::firstOrCreate([
@@ -82,10 +88,11 @@ class CognitoAuth
         'email' => $decoded->email,
       ]);
 
+      // ユーザを認証済みとして扱う
+      auth()->setUser($user);
+
       // 8. トークンからユーザ情報をリクエストにセット（任意）
-      //    ここでは sub, email などが取得できる
       $request->attributes->set('cognito_decoded_token', $decoded);
-      $request->attributes->set('user', $user);
     } catch (\Exception $e) {
       return response()->json([
         'error' => 'Unauthorized: ' . $e->getMessage()
