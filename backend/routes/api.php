@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PostController;
 
 Route::get('/public', function () {
   return response()->json([
@@ -23,11 +24,5 @@ Route::middleware('cognito.auth')->group(function () {
     ]);
   });
 
-  // 簡単なPOST例 (DBに保存など)
-  // Route::post('/posts', function (Request $request) {
-  //   $decoded = $request->attributes->get('cognito_decoded_token');
-  //   // 例: $decoded->sub とかを使って何かデータを作成
-  //   // ...
-  //   return response()->json(['result' => 'Created something.']);
-  // });
+  Route::resource('posts', PostController::class)->only(['index', 'store']);
 });
