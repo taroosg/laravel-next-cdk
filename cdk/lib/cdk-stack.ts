@@ -163,6 +163,9 @@ export class CdkStack extends cdk.Stack {
       memoryLimitMiB: 1024,
     });
 
+    // S3へのアクセス権限を付与
+    s3Bucket.grantReadWrite(backendTaskDef.taskRole);
+
     // コンテナ定義
     const backendContainer = backendTaskDef.addContainer('BackendContainer', {
       image: ContainerImage.fromEcrRepository(backendRepo, 'latest'),
