@@ -12,8 +12,8 @@ return new class extends Migration
   public function up(): void
   {
     Schema::create('posts', function (Blueprint $table) {
-      $table->id();
-      $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+      $table->ulid('id')->primary();
+      $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
       $table->string('content');
       $table->string('file_path');
       $table->timestamps();
