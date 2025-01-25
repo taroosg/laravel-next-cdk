@@ -2,7 +2,7 @@ services:
     laravel:
         build:
             context: './backend'
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.dev
         container_name: laravel
         ports:
           - '8000:8000'
@@ -45,7 +45,7 @@ services:
     nextjs:
         build:
             context: ./frontend
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.dev
         container_name: nextjs
         volumes:
           - ./frontend:/app
