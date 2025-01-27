@@ -53,6 +53,7 @@ export class CdkStack extends cdk.Stack {
     //
     const vpc = new Vpc(this, 'MyVpc', {
       maxAzs: 2,
+      natGateways: 2,
       subnetConfiguration: [
         {
           name: 'Public',
@@ -182,6 +183,8 @@ export class CdkStack extends cdk.Stack {
         COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
         COGNITO_REGION: this.region,
         APP_ENV: 'production',
+        LOG_CHANNEL: 'stderr',
+        APP_KEY: 'base64:9SYDdnYX3i/4llaegD0fFLvFuPM1SoEA/cWJU+zxP1U=',
       },
       secrets: {
         DB_PASSWORD: ECSSecret.fromSecretsManager(dbSecret, 'password'),
@@ -189,7 +192,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     backendContainer.addPortMappings({
-      containerPort: 8000,
+      containerPort: 80,
       protocol: Protocol.TCP,
     });
 
@@ -200,15 +203,17 @@ export class CdkStack extends cdk.Stack {
       cluster,
       taskDefinition: backendTaskDef,
       // 初回のみ0で実行 → Dockerイメージをビルドし、ECRにプッシュ → 以降1にしてcdk deploy
-      desiredCount: 0,
-      assignPublicIp: true,
-      vpcSubnets: { subnetType: SubnetType.PUBLIC },
+      desiredCount: 1,
+      assignPublicIp: false,
+      vpcSubnets: {
+        subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+      },
     });
 
     // ECSのサービス用SG
     const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
     // ALB から 8000 へのトラフィックを許可
-    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(8000));
+    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
     backendService.connections.addSecurityGroup(serviceSecurityGroup);
 
     // RDSへのアクセス(3306)を許可
@@ -222,7 +227,7 @@ export class CdkStack extends cdk.Stack {
       port: 80,
       targets: [backendService],
       healthCheck: {
-        path: '/', // ルートパスにアクセス (Laravelのルーティングに合わせる)
+        path: '/health_check',
         healthyHttpCodes: '200',
       },
     });
