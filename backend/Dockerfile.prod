@@ -5,8 +5,6 @@ COPY . .
 
 RUN composer install --no-dev --optimize-autoloader
 
-RUN php artisan config:cache && php artisan route:cache
-
 FROM php:8.4-fpm
 
 RUN apt-get update && apt-get install -y \
