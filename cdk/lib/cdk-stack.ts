@@ -178,7 +178,8 @@ export class CdkStack extends cdk.Stack {
         DB_HOST: dbInstance.instanceEndpoint.hostname,
         DB_DATABASE: 'laravel',
         DB_USERNAME: 'admin',
-        S3_BUCKET: s3Bucket.bucketName,
+        AWS_BUCKET: s3Bucket.bucketName,
+        AWS_DEFAULT_REGION: this.region,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
         COGNITO_REGION: this.region,
@@ -198,7 +199,7 @@ export class CdkStack extends cdk.Stack {
 
     // ECSのサービス用SG
     const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
-    // ALB から 8000 へのトラフィックを許可
+    // ALB から 80 へのトラフィックを許可
     serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
     // RDSへのアクセス(3306)を許可
     dbSecurityGroup.addIngressRule(serviceSecurityGroup, Port.tcp(3306), 'Allow MySQL from ECS');
@@ -217,9 +218,6 @@ export class CdkStack extends cdk.Stack {
         subnetType: SubnetType.PRIVATE_WITH_EGRESS,
       },
     });
-
-    // S3 への操作権限を付与 (読み書き)
-    s3Bucket.grantReadWrite(backendTaskDef.taskRole);
 
     // ALB リスナー → ECS サービスをターゲットに登録
     httpListener.addTargets('BackendTargetGroup', {
