@@ -49,7 +49,7 @@ export class CdkStack extends cdk.Stack {
     super(scope, id, props);
 
     //
-    // 1. VPC を作成 (パブリック + プライベートサブネット)
+    // VPC
     //
     const vpc = new Vpc(this, 'MyVpc', {
       maxAzs: 2,
@@ -84,7 +84,7 @@ export class CdkStack extends cdk.Stack {
 
 
     //
-    // 2. RDS (MySQL) を作成
+    // RDS (MySQL) を作成
     //   - Private サブネットに配置
     //   - パスワードは Secrets Manager に自動生成
     //
@@ -109,7 +109,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 3. S3 バケットの作成（Laravelのファイル保存用など）
+    // S3 バケットの作成（Laravelのファイル保存用など）
     //
     const s3Bucket = new Bucket(this, 'MyLaravelBucket', {
       removalPolicy: RemovalPolicy.DESTROY,
@@ -118,7 +118,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 4. ECR リポジトリ (Laravel アプリの Docker イメージを格納)
+    // ECR リポジトリ (Laravel アプリの Docker イメージを格納)
     //
     const backendRepo = new Repository(this, 'BackendEcrRepo', {
       repositoryName: 'laravel-backend-repo',
@@ -126,23 +126,23 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 5. ECS クラスタの作成
+    // ECS クラスタ
     //
     const cluster = new Cluster(this, 'MyEcsCluster', {
       vpc,
       clusterName: 'my-ecs-cluster',
     });
 
+    const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', { vpc });
+    albSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'Allow HTTP');
     //
-    // 6. ALB (Application Load Balancer) を構築 (パブリック)
+    // ALB
     //
     const alb = new ApplicationLoadBalancer(this, 'MyAlb', {
       vpc,
       internetFacing: true,
+      securityGroup: albSecurityGroup,
     });
-    const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', { vpc });
-    albSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'Allow HTTP');
-    alb.addSecurityGroup(albSecurityGroup);
 
     // HTTP リスナー (HTTPS使う場合は別途ACM証明書を設定)
     const httpListener = alb.addListener('HttpListener', {
@@ -151,10 +151,10 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 7. Fargate Task Definition (Laravelコンテナ) を作成
+    // Fargate Task Definition (Laravelコンテナ)
     //
     // DB接続情報のパスワードは Secrets Manager から取得
-    const dbSecret = dbInstance.secret; // RDS で自動生成されたシークレット
+    const dbSecret = dbInstance.secret;
     if (!dbSecret) {
       throw new Error('dbInstance.secret is undefined. Make sure credentials are properly generated.');
     }
@@ -196,12 +196,20 @@ export class CdkStack extends cdk.Stack {
       protocol: Protocol.TCP,
     });
 
+    // ECSのサービス用SG
+    const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
+    // ALB から 8000 へのトラフィックを許可
+    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
+    // RDSへのアクセス(3306)を許可
+    dbSecurityGroup.addIngressRule(serviceSecurityGroup, Port.tcp(3306), 'Allow MySQL from ECS');
+
     //
-    // 8. Fargate Service (コンテナ起動設定)
+    // Fargate Service (コンテナ起動設定)
     //
     const backendService = new FargateService(this, 'BackendService', {
       cluster,
       taskDefinition: backendTaskDef,
+      securityGroups: [serviceSecurityGroup],
       // 初回のみ0で実行 → Dockerイメージをビルドし、ECRにプッシュ → 以降1にしてcdk deploy
       desiredCount: 1,
       assignPublicIp: false,
@@ -209,15 +217,6 @@ export class CdkStack extends cdk.Stack {
         subnetType: SubnetType.PRIVATE_WITH_EGRESS,
       },
     });
-
-    // ECSのサービス用SG
-    const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
-    // ALB から 8000 へのトラフィックを許可
-    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
-    backendService.connections.addSecurityGroup(serviceSecurityGroup);
-
-    // RDSへのアクセス(3306)を許可
-    dbSecurityGroup.addIngressRule(serviceSecurityGroup, Port.tcp(3306), 'Allow MySQL from ECS');
 
     // S3 への操作権限を付与 (読み書き)
     s3Bucket.grantReadWrite(backendTaskDef.taskRole);
@@ -233,10 +232,8 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 9. 出力
+    // 出力
     //
-
-    // cognito関連の出力を追加
     new CfnOutput(this, 'UserPoolId', {
       value: userPool.userPoolId,
       description: 'Cognito User Pool ID',
