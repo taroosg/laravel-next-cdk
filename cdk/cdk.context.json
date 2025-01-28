@@ -6,5 +6,9 @@
     "us-east-1d",
     "us-east-1e",
     "us-east-1f"
-  ]
+  ],
+  "hosted-zone:account=792245405599:domainName=mofneko.com:region=us-east-1": {
+    "Id": "/hostedzone/Z09730472PUZIP3LS00NQ",
+    "Name": "mofneko.com."
+  }
 }

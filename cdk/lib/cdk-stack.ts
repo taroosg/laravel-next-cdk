@@ -1,5 +1,15 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as route53_targets from 'aws-cdk-lib/aws-route53-targets';
+import {
+  Certificate,
+  CertificateValidation
+} from 'aws-cdk-lib/aws-certificatemanager';
+import {
+  ListenerAction,
+  ListenerCertificate
+} from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 import {
   Vpc,
@@ -24,9 +34,6 @@ import {
 
 import {
   ApplicationLoadBalancer,
-  ApplicationProtocol,
-  ApplicationTargetGroup,
-  ApplicationListener,
 } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 import {
@@ -41,8 +48,10 @@ import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Bucket, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
 import { RemovalPolicy } from 'aws-cdk-lib';
 import { CfnOutput, Duration } from 'aws-cdk-lib';
-import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 export class CdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -66,7 +75,18 @@ export class CdkStack extends cdk.Stack {
       ],
     });
 
-    // --- Cognito ユーザープール ---
+    //  Route 53 & ACM
+    const hostedZone = route53.HostedZone.fromLookup(this, 'MyHostedZone', {
+      domainName: process.env.DOMAIN_NAME ?? '',
+    });
+
+    // "api.mydomain.com" 用の証明書を作成
+    const certificate = new Certificate(this, 'ApiCertificate', {
+      domainName: 'api.' + process.env.DOMAIN_NAME,
+      validation: CertificateValidation.fromDns(hostedZone),
+    });
+
+    // Cognito ユーザープール
     const userPool = new cognito.UserPool(this, 'MyUserPool', {
       userPoolName: 'laravel-user-pool',
       selfSignUpEnabled: true,
@@ -81,7 +101,6 @@ export class CdkStack extends cdk.Stack {
         userSrp: true,
       },
     });
-
 
     //
     // RDS (MySQL) を作成
@@ -135,6 +154,7 @@ export class CdkStack extends cdk.Stack {
 
     const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', { vpc });
     albSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'Allow HTTP');
+
     //
     // ALB
     //
@@ -144,10 +164,25 @@ export class CdkStack extends cdk.Stack {
       securityGroup: albSecurityGroup,
     });
 
-    // HTTP リスナー (HTTPS使う場合は別途ACM証明書を設定)
+    // HTTP リスナー (80)
     const httpListener = alb.addListener('HttpListener', {
       port: 80,
       open: true,
+    });
+
+    // HTTPS リスナー (443)
+    const httpsListener = alb.addListener('HttpsListener', {
+      port: 443,
+      open: true,
+      certificates: [ certificate ],
+    });
+
+    // HTTP リクエストを HTTPS にリダイレクト
+    httpListener.addAction('HttpRedirect', {
+      action: ListenerAction.redirect({
+        protocol: 'HTTPS',
+        port: '443',
+      }),
     });
 
     //
@@ -185,7 +220,7 @@ export class CdkStack extends cdk.Stack {
         COGNITO_REGION: this.region,
         APP_ENV: 'production',
         LOG_CHANNEL: 'stderr',
-        APP_KEY: 'base64:9SYDdnYX3i/4llaegD0fFLvFuPM1SoEA/cWJU+zxP1U=',
+        APP_KEY: process.env.LARAVEL_API_KEY ?? '',
       },
       secrets: {
         DB_PASSWORD: ECSSecret.fromSecretsManager(dbSecret, 'password'),
@@ -220,7 +255,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     // ALB リスナー → ECS サービスをターゲットに登録
-    httpListener.addTargets('BackendTargetGroup', {
+    httpsListener.addTargets('BackendTargetGroup', {
       port: 80,
       targets: [backendService],
       healthCheck: {
@@ -229,9 +264,24 @@ export class CdkStack extends cdk.Stack {
       },
     });
 
+    //  Route53 Alias Record
+    new route53.ARecord(this, 'AliasRecord', {
+      zone: hostedZone,
+      recordName: 'api',  // => "api.mydomain.com"
+      target: route53.RecordTarget.fromAlias(
+        new route53_targets.LoadBalancerTarget(alb)
+      ),
+    });
+
+
     //
     // 出力
     //
+    new CfnOutput(this, 'DomainUrl', {
+      value: 'https://api.' + process.env.DOMAIN_NAME,
+      description: 'ALB custom domain URL',
+    });
+
     new CfnOutput(this, 'UserPoolId', {
       value: userPool.userPoolId,
       description: 'Cognito User Pool ID',
