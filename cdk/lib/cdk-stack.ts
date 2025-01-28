@@ -1,5 +1,15 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as route53_targets from 'aws-cdk-lib/aws-route53-targets';
+import {
+  Certificate,
+  CertificateValidation
+} from 'aws-cdk-lib/aws-certificatemanager';
+
+import {
+  ListenerAction,
+} from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 import {
   Vpc,
@@ -24,9 +34,6 @@ import {
 
 import {
   ApplicationLoadBalancer,
-  ApplicationProtocol,
-  ApplicationTargetGroup,
-  ApplicationListener,
 } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 import {
@@ -41,15 +48,17 @@ import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { Bucket, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
 import { RemovalPolicy } from 'aws-cdk-lib';
 import { CfnOutput, Duration } from 'aws-cdk-lib';
-import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 export class CdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     //
-    // 1. VPC を作成 (パブリック + プライベートサブネット)
+    // VPC
     //
     const vpc = new Vpc(this, 'MyVpc', {
       maxAzs: 2,
@@ -66,7 +75,18 @@ export class CdkStack extends cdk.Stack {
       ],
     });
 
-    // --- Cognito ユーザープール ---
+    //  Route 53 & ACM
+    const hostedZone = route53.HostedZone.fromLookup(this, 'MyHostedZone', {
+      domainName: process.env.DOMAIN_NAME ?? '',
+    });
+
+    // "api.mydomain.com" 用の証明書を作成
+    const certificate = new Certificate(this, 'ApiCertificate', {
+      domainName: 'api.' + process.env.DOMAIN_NAME,
+      validation: CertificateValidation.fromDns(hostedZone),
+    });
+
+    // Cognito ユーザープール
     const userPool = new cognito.UserPool(this, 'MyUserPool', {
       userPoolName: 'laravel-user-pool',
       selfSignUpEnabled: true,
@@ -82,9 +102,8 @@ export class CdkStack extends cdk.Stack {
       },
     });
 
-
     //
-    // 2. RDS (MySQL) を作成
+    // RDS (MySQL) を作成
     //   - Private サブネットに配置
     //   - パスワードは Secrets Manager に自動生成
     //
@@ -103,13 +122,13 @@ export class CdkStack extends cdk.Stack {
       allocatedStorage: 20,
       storageType: StorageType.GP2,
       credentials: Credentials.fromGeneratedSecret('admin'), // Secrets Managerに保存
-      databaseName: 'laravel', // デフォルトDB名
+      databaseName: 'laravel',
       removalPolicy: RemovalPolicy.DESTROY,
       deletionProtection: false,
     });
 
     //
-    // 3. S3 バケットの作成（Laravelのファイル保存用など）
+    // S3 バケットの作成（Laravelのファイル保存用など）
     //
     const s3Bucket = new Bucket(this, 'MyLaravelBucket', {
       removalPolicy: RemovalPolicy.DESTROY,
@@ -118,7 +137,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 4. ECR リポジトリ (Laravel アプリの Docker イメージを格納)
+    // ECR リポジトリ (Laravel アプリの Docker イメージを格納)
     //
     const backendRepo = new Repository(this, 'BackendEcrRepo', {
       repositoryName: 'laravel-backend-repo',
@@ -126,35 +145,51 @@ export class CdkStack extends cdk.Stack {
     });
 
     //
-    // 5. ECS クラスタの作成
+    // ECS クラスタ
     //
     const cluster = new Cluster(this, 'MyEcsCluster', {
       vpc,
       clusterName: 'my-ecs-cluster',
     });
 
+    const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', { vpc });
+    albSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'Allow HTTP');
+
     //
-    // 6. ALB (Application Load Balancer) を構築 (パブリック)
+    // ALB
     //
     const alb = new ApplicationLoadBalancer(this, 'MyAlb', {
       vpc,
       internetFacing: true,
+      securityGroup: albSecurityGroup,
     });
-    const albSecurityGroup = new SecurityGroup(this, 'AlbSecurityGroup', { vpc });
-    albSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'Allow HTTP');
-    alb.addSecurityGroup(albSecurityGroup);
 
-    // HTTP リスナー (HTTPS使う場合は別途ACM証明書を設定)
+    // HTTP リスナー (80)
     const httpListener = alb.addListener('HttpListener', {
       port: 80,
       open: true,
     });
 
+    // HTTPS リスナー (443)
+    const httpsListener = alb.addListener('HttpsListener', {
+      port: 443,
+      open: true,
+      certificates: [ certificate ],
+    });
+
+    // HTTP リクエストを HTTPS にリダイレクト
+    httpListener.addAction('HttpRedirect', {
+      action: ListenerAction.redirect({
+        protocol: 'HTTPS',
+        port: '443',
+      }),
+    });
+
     //
-    // 7. Fargate Task Definition (Laravelコンテナ) を作成
+    // Fargate Task Definition (Laravelコンテナ)
     //
     // DB接続情報のパスワードは Secrets Manager から取得
-    const dbSecret = dbInstance.secret; // RDS で自動生成されたシークレット
+    const dbSecret = dbInstance.secret;
     if (!dbSecret) {
       throw new Error('dbInstance.secret is undefined. Make sure credentials are properly generated.');
     }
@@ -178,13 +213,14 @@ export class CdkStack extends cdk.Stack {
         DB_HOST: dbInstance.instanceEndpoint.hostname,
         DB_DATABASE: 'laravel',
         DB_USERNAME: 'admin',
-        S3_BUCKET: s3Bucket.bucketName,
+        AWS_BUCKET: s3Bucket.bucketName,
+        AWS_DEFAULT_REGION: this.region,
         COGNITO_USER_POOL_ID: userPool.userPoolId,
         COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
         COGNITO_REGION: this.region,
         APP_ENV: 'production',
         LOG_CHANNEL: 'stderr',
-        APP_KEY: 'base64:9SYDdnYX3i/4llaegD0fFLvFuPM1SoEA/cWJU+zxP1U=',
+        APP_KEY: process.env.LARAVEL_API_KEY ?? '',
       },
       secrets: {
         DB_PASSWORD: ECSSecret.fromSecretsManager(dbSecret, 'password'),
@@ -196,34 +232,31 @@ export class CdkStack extends cdk.Stack {
       protocol: Protocol.TCP,
     });
 
+    // ECSのサービス用SG
+    const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
+    // ALB から 80 へのトラフィックを許可
+    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
+    // RDSへのアクセス(3306)を許可
+    dbSecurityGroup.addIngressRule(serviceSecurityGroup, Port.tcp(3306), 'Allow MySQL from ECS');
+
     //
-    // 8. Fargate Service (コンテナ起動設定)
+    // Fargate Service (コンテナ起動設定)
     //
     const backendService = new FargateService(this, 'BackendService', {
       cluster,
       taskDefinition: backendTaskDef,
+      securityGroups: [serviceSecurityGroup],
       // 初回のみ0で実行 → Dockerイメージをビルドし、ECRにプッシュ → 以降1にしてcdk deploy
       desiredCount: 1,
       assignPublicIp: false,
       vpcSubnets: {
         subnetType: SubnetType.PRIVATE_WITH_EGRESS,
       },
+      enableExecuteCommand: true,
     });
 
-    // ECSのサービス用SG
-    const serviceSecurityGroup = new SecurityGroup(this, 'BackendServiceSG', { vpc });
-    // ALB から 8000 へのトラフィックを許可
-    serviceSecurityGroup.addIngressRule(albSecurityGroup, Port.tcp(80));
-    backendService.connections.addSecurityGroup(serviceSecurityGroup);
-
-    // RDSへのアクセス(3306)を許可
-    dbSecurityGroup.addIngressRule(serviceSecurityGroup, Port.tcp(3306), 'Allow MySQL from ECS');
-
-    // S3 への操作権限を付与 (読み書き)
-    s3Bucket.grantReadWrite(backendTaskDef.taskRole);
-
     // ALB リスナー → ECS サービスをターゲットに登録
-    httpListener.addTargets('BackendTargetGroup', {
+    httpsListener.addTargets('BackendTargetGroup', {
       port: 80,
       targets: [backendService],
       healthCheck: {
@@ -232,11 +265,23 @@ export class CdkStack extends cdk.Stack {
       },
     });
 
-    //
-    // 9. 出力
-    //
+    //  Route53 Alias Record
+    new route53.ARecord(this, 'AliasRecord', {
+      zone: hostedZone,
+      recordName: 'api',  // => "api.mydomain.com"
+      target: route53.RecordTarget.fromAlias(
+        new route53_targets.LoadBalancerTarget(alb)
+      ),
+    });
 
-    // cognito関連の出力を追加
+    //
+    // 出力
+    //
+    new CfnOutput(this, 'DomainUrl', {
+      value: 'https://api.' + process.env.DOMAIN_NAME,
+      description: 'ALB custom domain URL',
+    });
+
     new CfnOutput(this, 'UserPoolId', {
       value: userPool.userPoolId,
       description: 'Cognito User Pool ID',
