@@ -8,7 +8,6 @@ import {
 } from 'aws-cdk-lib/aws-certificatemanager';
 import {
   ListenerAction,
-  ListenerCertificate
 } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 import {
@@ -122,7 +121,7 @@ export class CdkStack extends cdk.Stack {
       allocatedStorage: 20,
       storageType: StorageType.GP2,
       credentials: Credentials.fromGeneratedSecret('admin'), // Secrets Managerに保存
-      databaseName: 'laravel', // デフォルトDB名
+      databaseName: 'laravel',
       removalPolicy: RemovalPolicy.DESTROY,
       deletionProtection: false,
     });
@@ -252,6 +251,7 @@ export class CdkStack extends cdk.Stack {
       vpcSubnets: {
         subnetType: SubnetType.PRIVATE_WITH_EGRESS,
       },
+      enableExecuteCommand: true,
     });
 
     // ALB リスナー → ECS サービスをターゲットに登録
@@ -272,7 +272,6 @@ export class CdkStack extends cdk.Stack {
         new route53_targets.LoadBalancerTarget(alb)
       ),
     });
-
 
     //
     // 出力
