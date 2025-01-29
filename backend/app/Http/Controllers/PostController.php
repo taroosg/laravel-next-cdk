@@ -69,11 +69,11 @@ class PostController extends Controller
     $post->file_url = $temporaryUrl;
 
     // メール送信（テスト用）
-    Mail::raw('This is a test email sent via AWS SES!', function ($message) {
-      $message
-        ->to('noreply@mofneko.com')
-        ->subject('Hello from Laravel + SES');
-    });
+    // Mail::raw('This is a test email sent via AWS SES!', function ($message) {
+    //   $message
+    //     ->to('noreply@mofneko.com')
+    //     ->subject('Hello from Laravel + SES');
+    // });
 
     return response()->json([
       'message' => 'Post created successfully',
