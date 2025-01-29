@@ -227,6 +227,7 @@ export class CdkStack extends cdk.Stack {
     const backendTaskDef = new FargateTaskDefinition(this, 'BackendTaskDef', {
       cpu: 512,
       memoryLimitMiB: 1024,
+      family: 'BackendTaskDef',
     });
 
     // SES へのアクセス権限を付与
@@ -244,6 +245,7 @@ export class CdkStack extends cdk.Stack {
     // コンテナ定義
     const backendContainer = backendTaskDef.addContainer('BackendContainer', {
       image: ContainerImage.fromEcrRepository(backendRepo, 'latest'),
+      containerName: 'BackendContainer',
       logging: new AwsLogDriver({
         streamPrefix: 'laravel-backend',
       }),
