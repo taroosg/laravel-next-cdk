@@ -70,9 +70,9 @@ jobs:
           echo "ASSIGN_PUB=$ASSIGN_PUB"
 
           # Build ECS CLI format: e.g. awsvpcConfiguration={subnets=[subnet-xxx,subnet-yyy],securityGroups=[sg-zzzz],assignPublicIp=DISABLED}
-          ECS_NET_CONFIG="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=$ASSIGN_PUB}"
+          NET_CONFIG="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=$ASSIGN_PUB}"
 
-          echo "ECS_NET_CONFIG=$ECS_NET_CONFIG" >> $GITHUB_ENV
+          echo "NET_CONFIG=$NET_CONFIG" >> $GITHUB_ENV
 
       - name: Run Migrations
         run: |
