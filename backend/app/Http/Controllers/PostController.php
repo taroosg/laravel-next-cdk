@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Mail;
 
 class PostController extends Controller
 {
@@ -66,6 +67,13 @@ class PostController extends Controller
     $temporaryUrl = Storage::disk('s3')->temporaryUrl($filePath, now()->addMinutes(15));
 
     $post->file_url = $temporaryUrl;
+
+    // メール送信（テスト用）
+    Mail::raw('This is a test email sent via AWS SES!', function ($message) {
+      $message
+        ->to('noreply@mofneko.com')
+        ->subject('Hello from Laravel + SES');
+    });
 
     return response()->json([
       'message' => 'Post created successfully',
