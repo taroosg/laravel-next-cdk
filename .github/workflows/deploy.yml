@@ -1,0 +1,99 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. ソースコードをチェックアウト
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      # 2. AWS認証情報の設定
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # 3. ECR へのログイン
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+      # 4. Dockerイメージをビルド
+      - name: Build Docker Image
+        run: |
+          # backend ディレクトリ配下の Dockerfile.prod を使用
+          docker build -f ./backend/Dockerfile.prod -t laravel-backend-repo:latest ./backend
+
+      # 5. イメージにタグを付け
+      - name: Tag Image
+        run: |
+          docker tag laravel-backend-repo:latest ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/laravel-backend-repo:latest
+
+      # 6. ECR にプッシュ
+      - name: Push to ECR
+        run: |
+          docker push ${{ secrets.ECR_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/laravel-backend-repo:latest
+
+      # 7. ECS サービスを強制再デプロイ
+      - name: Update ECS Service
+        run: |
+          aws ecs update-service \
+            --cluster my-ecs-cluster \
+            --service BackendService \
+            --force-new-deployment \
+            --region us-east-1
+
+      # 8. ECS サービスのネットワーク設定を取得
+      - name: Get ECS Network Config
+        run: |
+          NET_CONFIG=$(aws ecs describe-services \
+            --cluster my-ecs-cluster \
+            --services BackendService \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration' \
+            --output json \
+            --region us-east-1)
+          echo "NET_CONFIG=$NET_CONFIG" >> $GITHUB_ENV
+
+      # 9. マイグレーション用タスクを一時起動して実行
+      - name: Run Migrations
+        run: |
+          echo "Using NET_CONFIG=$NET_CONFIG"
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster my-ecs-cluster \
+            --launch-type FARGATE \
+            --task-definition BackendTaskDef \
+            --network-configuration "awsvpcConfiguration=$NET_CONFIG" \
+            --overrides '{"containerOverrides":[{"name":"BackendContainer","command":["php","artisan","migrate","--force"]}]}' \
+            --region us-east-1 \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Launched migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped --cluster my-ecs-cluster --tasks $TASK_ARN --region us-east-1
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster my-ecs-cluster \
+            --tasks $TASK_ARN \
+            --region us-east-1 \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          echo "Migration task exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "Migration succeeded!"
