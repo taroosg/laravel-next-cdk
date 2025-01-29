@@ -251,6 +251,7 @@ export class CdkStack extends cdk.Stack {
       }),
       environment: {
         // 環境変数は平文でOKなものを指定
+        DB_CONNECTION: 'mysql',
         DB_HOST: dbInstance.instanceEndpoint.hostname,
         DB_DATABASE: 'laravel',
         DB_USERNAME: 'admin',
