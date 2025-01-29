@@ -283,6 +283,7 @@ export class CdkStack extends cdk.Stack {
     //
     const backendService = new FargateService(this, 'BackendService', {
       cluster,
+      serviceName: 'BackendService',
       taskDefinition: backendTaskDef,
       securityGroups: [serviceSecurityGroup],
       // 初回のみ0で実行 → Dockerイメージをビルドし、ECRにプッシュ → 以降1にしてcdk deploy
