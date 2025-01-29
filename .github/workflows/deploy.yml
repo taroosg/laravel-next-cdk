@@ -47,6 +47,7 @@ jobs:
 
       - name: Get ECS Network Config
         run: |
+          # Get JSON
           RAW_JSON=$(aws ecs describe-services \
             --cluster my-ecs-cluster \
             --services BackendService \
@@ -56,15 +57,22 @@ jobs:
 
           echo "RAW_JSON=$RAW_JSON"
 
-          # Convert JSON to single-line
-          NET_CONFIG=$(echo "$RAW_JSON" | jq -c '.')
+          # Extract subnets array => e.g. ["subnet-123","subnet-456"]
+          SUBNETS=$(echo "$RAW_JSON" | jq -r '.subnets | join(",")')
+          echo "SUBNETS=$SUBNETS"
 
-          # Escape special chars for GitHub Actions
-          NET_CONFIG_ESCAPED="${NET_CONFIG//'%'/'%25'}"
-          NET_CONFIG_ESCAPED="${NET_CONFIG_ESCAPED//$'\n'/'%0A'}"
-          NET_CONFIG_ESCAPED="${NET_CONFIG_ESCAPED//$'\r'/'%0D'}"
+          # Extract securityGroups array => e.g. ["sg-abc"] => "sg-abc"
+          SECURITY_GROUPS=$(echo "$RAW_JSON" | jq -r '.securityGroups | join(",")')
+          echo "SECURITY_GROUPS=$SECURITY_GROUPS"
 
-          echo "NET_CONFIG=$NET_CONFIG_ESCAPED" >> $GITHUB_ENV
+          # Extract assignPublicIp => e.g. "DISABLED"
+          ASSIGN_PUB=$(echo "$RAW_JSON" | jq -r '.assignPublicIp')
+          echo "ASSIGN_PUB=$ASSIGN_PUB"
+
+          # Build ECS CLI format: e.g. awsvpcConfiguration={subnets=[subnet-xxx,subnet-yyy],securityGroups=[sg-zzzz],assignPublicIp=DISABLED}
+          ECS_NET_CONFIG="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=$ASSIGN_PUB}"
+
+          echo "ECS_NET_CONFIG=$ECS_NET_CONFIG" >> $GITHUB_ENV
 
       - name: Run Migrations
         run: |
