@@ -7,6 +7,10 @@ import {
   CertificateValidation
 } from 'aws-cdk-lib/aws-certificatemanager';
 
+import * as ses from 'aws-cdk-lib/aws-ses';
+import { Identity, DkimIdentity, MailFromBehaviorOnMxFailure } from 'aws-cdk-lib/aws-ses';
+import * as iam from 'aws-cdk-lib/aws-iam';
+
 import {
   ListenerAction,
 } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
@@ -85,6 +89,32 @@ export class CdkStack extends cdk.Stack {
       domainName: 'api.' + process.env.DOMAIN_NAME,
       validation: CertificateValidation.fromDns(hostedZone),
     });
+
+    // SES ドメインアイデンティティを作成
+    const emailIdentity = new ses.EmailIdentity(this, 'DomainEmailIdentity', {
+      identity: ses.Identity.publicHostedZone(hostedZone),
+      dkimIdentity: ses.DkimIdentity.easyDkim(),
+      // メール用サブドメインの設定（うまくいってない）
+      // mailFromDomain: 'mail.' + process.env.DOMAIN_NAME,
+      mailFromBehaviorOnMxFailure: MailFromBehaviorOnMxFailure.REJECT_MESSAGE,
+    });
+
+    // メール用サブドメインの設定（うまくいってない）
+    // new route53.MxRecord(this, 'MailFromMx', {
+    //   zone: hostedZone,
+    //   recordName: `mail.${process.env.DOMAIN_NAME}`,
+    //   values: [
+    //     { priority: 10, hostName: 'feedback-smtp.us-east-1.amazonaws.com' },
+    //   ],
+    // });
+    // new route53.TxtRecord(this, 'MailFromSpf', {
+    //   zone: hostedZone,
+    //   recordName: `mail.${process.env.DOMAIN_NAME}`,
+    //   values: [
+    //     'v=spf1 include:amazonses.com -all',
+    //   ],
+    // });
+
 
     // Cognito ユーザープール
     const userPool = new cognito.UserPool(this, 'MyUserPool', {
@@ -198,6 +228,15 @@ export class CdkStack extends cdk.Stack {
       cpu: 512,
       memoryLimitMiB: 1024,
     });
+
+    // SES へのアクセス権限を付与
+    backendTaskDef.taskRole.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: [
+        'ses:SendEmail',
+        'ses:SendRawEmail',
+      ],
+      resources: ['*'],
+    }));
 
     // S3へのアクセス権限を付与
     s3Bucket.grantReadWrite(backendTaskDef.taskRole);
