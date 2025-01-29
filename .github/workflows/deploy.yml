@@ -47,7 +47,6 @@ jobs:
 
       - name: Get ECS Network Config
         run: |
-          # Get JSON
           RAW_JSON=$(aws ecs describe-services \
             --cluster my-ecs-cluster \
             --services BackendService \
@@ -57,20 +56,12 @@ jobs:
 
           echo "RAW_JSON=$RAW_JSON"
 
-          # Extract subnets array => e.g. ["subnet-123","subnet-456"]
           SUBNETS=$(echo "$RAW_JSON" | jq -r '.subnets | join(",")')
-          echo "SUBNETS=$SUBNETS"
-
-          # Extract securityGroups array => e.g. ["sg-abc"] => "sg-abc"
           SECURITY_GROUPS=$(echo "$RAW_JSON" | jq -r '.securityGroups | join(",")')
-          echo "SECURITY_GROUPS=$SECURITY_GROUPS"
-
-          # Extract assignPublicIp => e.g. "DISABLED"
           ASSIGN_PUB=$(echo "$RAW_JSON" | jq -r '.assignPublicIp')
-          echo "ASSIGN_PUB=$ASSIGN_PUB"
 
-          # Build ECS CLI format: e.g. awsvpcConfiguration={subnets=[subnet-xxx,subnet-yyy],securityGroups=[sg-zzzz],assignPublicIp=DISABLED}
-          NET_CONFIG="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=$ASSIGN_PUB}"
+          # Build ECS CLI format, but EXCLUDE `awsvpcConfiguration=` prefix
+          NET_CONFIG="{subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=$ASSIGN_PUB}"
 
           echo "NET_CONFIG=$NET_CONFIG" >> $GITHUB_ENV
 
@@ -88,7 +79,6 @@ jobs:
             --output text)
 
           echo "Launched migration task: $TASK_ARN"
-
           aws ecs wait tasks-stopped --cluster my-ecs-cluster --tasks $TASK_ARN --region us-east-1
 
           EXIT_CODE=$(aws ecs describe-tasks \
