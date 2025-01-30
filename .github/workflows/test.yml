@@ -27,6 +27,8 @@ jobs:
 
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist --optimize-autoloader
+        working-directory: ./backend
 
       - name: Run Laravel Tests
         run: php artisan test
+        working-directory: ./backend
