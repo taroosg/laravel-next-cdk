@@ -8,13 +8,7 @@ export default function PostsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const idToken = localStorage.getItem('cognito-id-token');
-    if (!idToken) {
-      setError('Not logged in');
-      return;
-    }
-
-    getPosts(idToken)
+    getPosts()
       .then(data => setPosts(data))
       .catch(err => {
         if (err instanceof Error) {

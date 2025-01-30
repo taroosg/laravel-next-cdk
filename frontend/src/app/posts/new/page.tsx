@@ -14,15 +14,9 @@ export default function NewPostPage() {
     e.preventDefault();
     setError('');
 
-    const idToken = localStorage.getItem('cognito-id-token');
-    if (!idToken) {
-      setError('Not logged in');
-      return;
-    }
-
     try {
-      await createPost(idToken, text, file!);
-      router.push('/posts');  // 一覧へ遷移
+      await createPost(text, file!);
+      router.push('/posts');
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);

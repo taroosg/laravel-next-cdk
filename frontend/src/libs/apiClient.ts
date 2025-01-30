@@ -1,4 +1,8 @@
-export async function getPosts(idToken: string): Promise<Post[]> {
+import { fetchAuthSession } from "aws-amplify/auth";
+
+export async function getPosts(): Promise<Post[]> {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken;
   const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/posts`, {
     method: 'GET',
     headers: {
@@ -12,8 +16,10 @@ export async function getPosts(idToken: string): Promise<Post[]> {
 }
 
 // テキスト + ファイル投稿
-// file には通常、<input type="file"> で取得した File を渡す
-export async function createPost(idToken: string, content: string, file: File) {
+export async function createPost( content: string, file: File) {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken;
+
   const formData = new FormData();
   formData.append('content', content);
     formData.append('file', file);
