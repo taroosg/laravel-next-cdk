@@ -28,7 +28,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Authenticator>
+        <Authenticator signUpAttributes={[]} loginMechanisms={['email']} hideSignUp>
           <header style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem' }}>
             <LogoutButton />
           </header>

@@ -119,7 +119,7 @@ export class CdkStack extends cdk.Stack {
     // Cognito ユーザープール
     const userPool = new cognito.UserPool(this, 'MyUserPool', {
       userPoolName: 'laravel-user-pool',
-      selfSignUpEnabled: true,
+      selfSignUpEnabled: false,
       signInAliases: { email: true },
       removalPolicy: RemovalPolicy.DESTROY,
     });
@@ -127,6 +127,7 @@ export class CdkStack extends cdk.Stack {
       userPoolClientName: 'laravel-user-pool-appclient',
       generateSecret: false,
       authFlows: {
+        adminUserPassword: true,
         userPassword: true,
         userSrp: true,
       },
