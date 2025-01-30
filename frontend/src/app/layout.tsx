@@ -6,6 +6,7 @@ import '@aws-amplify/ui-react/styles.css';
 import {
   Authenticator,
 } from "@aws-amplify/ui-react";
+import LogoutButton from '@/components/LogoutButton';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Authenticator>
+          <header style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem' }}>
+            <LogoutButton />
+          </header>
           {children}
         </Authenticator>
       </body>
