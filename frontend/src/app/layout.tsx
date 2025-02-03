@@ -29,7 +29,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Authenticator signUpAttributes={[]} loginMechanisms={['email']} hideSignUp>
-          <header style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem' }}>
+          <header className="flex justify-start items-center p-4 bg-gray-800 text-white gap-4">
+            <a href="/posts">一覧</a>
+            <a href="/posts/new">新規作成</a>
             <LogoutButton />
           </header>
           {children}

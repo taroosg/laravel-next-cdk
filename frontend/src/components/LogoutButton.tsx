@@ -7,7 +7,7 @@ export default function LogoutButton() {
   const { signOut } = useAuthenticator((context) => [context.user]);
 
   return (
-    <button onClick={signOut} style={{ margin: '0 1rem' }}>
+    <button onClick={signOut} className="ml-auto">
       Logout
     </button>
   );
