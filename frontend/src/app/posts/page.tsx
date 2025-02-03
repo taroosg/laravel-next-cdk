@@ -21,16 +21,24 @@ export default function PostsPage() {
 
   return (
     <div>
-      <h1>Posts</h1>
+      <h1 className='text-xl'>Posts</h1>
       {error && <p style={{ color: 'red' }}>{error}</p>}
-      <ul>
-        {posts.map(post => (
-          <li key={post.id}>
-            <p>{post.content}</p>
-            {post.file_url && <img src={post.file_url} alt="file" />}
-          </li>
-        ))}
-      </ul>
+      <table>
+        <thead>
+          <tr>
+            <th>Content</th>
+            <th>File</th>
+          </tr>
+        </thead>
+        <tbody>
+          {posts.map(post => (
+            <tr key={post.id}>
+              <td>{post.content}</td>
+              <td>{post.file_url && <a href={post.file_url} target='_blank'>リンク</a>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
