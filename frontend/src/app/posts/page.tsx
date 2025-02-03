@@ -20,17 +20,30 @@ export default function PostsPage() {
   }, []);
 
   return (
-    <div>
-      <h1>Posts</h1>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <ul>
-        {posts.map(post => (
-          <li key={post.id}>
-            <p>{post.content}</p>
-            {post.file_url && <img src={post.file_url} alt="file" />}
-          </li>
-        ))}
-      </ul>
-    </div>
+    posts.length === 0 ? (
+      <p className='text-center'>Loading...</p>
+    ) : (
+      <div className='flex flex-col items-center gap-4'>
+        <h1 className='text-xl'>投稿一覧</h1>
+        {error && <p className='text-red-400'>{error}</p>}
+        <table>
+          <thead>
+            <tr>
+              <th>Content</th>
+              <th>File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {posts.map(post => (
+              <tr key={post.id}>
+                <td className='border'>{post.content}</td>
+                <td className='border'>{post.file_url && <a href={post.file_url} target='_blank'>リンク</a>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+
   );
 }

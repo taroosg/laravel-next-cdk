@@ -13,7 +13,6 @@ export default function NewPostPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
     try {
       await createPost(text, file!);
       router.push('/posts');
@@ -27,16 +26,17 @@ export default function NewPostPage() {
   }
 
   return (
-    <div>
-      <h1>Create a New Post</h1>
-      <form onSubmit={handleSubmit}>
-        <label>Text:
+    <div className='flex flex-col items-center gap-4'>
+      <h1 className='text-xl'>新規投稿</h1>
+      <form onSubmit={handleSubmit} className='flex flex-col gap-4 items-start'>
+        <label>テキスト:
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
+            className='border p-2 text-black'
           />
         </label>
-        <label>File:
+        <label>ファイル:
           <input
             type="file"
             onChange={(e) => {
@@ -46,9 +46,9 @@ export default function NewPostPage() {
             }}
           />
         </label>
-        <button type="submit">Submit</button>
+        <button type="submit" className='border p-2'>Submit</button>
       </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className='text-color-400'>{error}</p>}
     </div>
   );
 }
